@@ -131,8 +131,8 @@ levels(train$ris) <- c("Win", "Bank")
 set.seed(1234)
 grid = expand.grid(.alpha=1,.lambda=seq(0, 1, by = 0.01))
 Control=trainControl(method= "cv",number=10, classProbs=TRUE)
-glm_lasso=train(ris~S1+S2+X3+X4, method = "glmnet", data=train,
-                trControl = Control, tuneLength=5, tuneGrid=grid, metric="Spec", na.action=na.exclude)
+glm_lasso=train(ris~S1+S2+X3+X4+S1*anno+S2*anno+anno, method = "glmnet", data=train,
+                trControl = Control, tuneLength=10, tuneGrid=grid, metric="Accuracy", na.action=na.exclude)
 glm_lasso
 plot(glm_lasso)
 getTrainPerf(glm_lasso)
@@ -141,9 +141,9 @@ getTrainPerf(glm_lasso)
 set.seed(1)
 cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE,
                        summaryFunction = twoClassSummary)
-rpartTuneCvA <- train(ris~S1+S2+X3+X4+anno, data = train, method = "rpart",
-                      tuneLength = 6, na.action=na.exclude,
-                      trControl = cvCtrl, metric="accuracy")
+rpartTuneCvA <- train(ris~S1+S2+X3+X4+S1*anno+S2*anno+anno, data = train, method = "rpart",
+                      tuneLength = 8, na.action=na.exclude,
+                      trControl = cvCtrl, metric="Accuracy")
 
 rpartTuneCvA
 getTrainPerf(rpartTuneCvA)
@@ -154,9 +154,9 @@ plot(varImp(object=rpartTuneCvA),main="train tuned - Variable Importance")
 set.seed(1)
 cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE,
                        summaryFunction = twoClassSummary)
-rfTune <- train(ris~S1+S2+X3+X4+anno, data = train, method = "rf",
+rfTune <- train(ris~S1+S2+X3+X4+S1*anno+S2*anno+anno, data = train, method = "rf",
                 tuneLength = 3,
-                trControl = cvCtrl, metric="metric", na.action=na.exclude) # con tuneLength=6 ci mette l'infinito
+                trControl = cvCtrl, metric="metric", na.action=na.exclude) # con tuneLength=3 ci mette tanto
 rfTune
 getTrainPerf(rfTune)
 plot(varImp(object=rfTune),main="train tuned - Variable Importance")
@@ -165,8 +165,8 @@ plot(varImp(object=rfTune),main="train tuned - Variable Importance")
 set.seed(2)
 cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE,
                        summaryFunction = twoClassSummary)
-NNTune <- train(ris~S1+S2+X3+X4+anno, data = train, method = "nnet",
-                tuneLength = 2,
+NNTune <- train(ris~S1+S2+X3+X4+S1*anno+S2*anno+anno, data = train, method = "nnet",
+                tuneLength = 4,
                 trControl = cvCtrl, metric="metric", preProcess="range", na.action=na.exclude) # Non andare oltre il 6 di tuneLength 
 NNTune
 plot(varImp(object=NNTune),main="train tuned - Variable Importance")
@@ -175,17 +175,18 @@ plot(varImp(object=NNTune),main="train tuned - Variable Importance")
 set.seed(3)
 cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE,
                        summaryFunction = twoClassSummary)
-XGBTune <- train(ris~S1+S2+X3+X4+anno, data = train, method = "xgbTree",
+XGBTune <- train(ris~S1+S2+X3+X4+S1*anno+S2*anno+anno, data = train, method = "xgbTree",
                  tuneLength = 2,
                  trControl = cvCtrl, metric="metric", na.action=na.exclude) # Non andare oltre il 6 di tuneLength 
 XGBTune
+getTrainPerf(XGBTune)
 plot(varImp(object=XGBTune),main="train tuned - Variable Importance")
 
 ### Adaboost ------
 set.seed(5)
 cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE,
                        summaryFunction = twoClassSummary)
-AdaBTune <- train(ris~S1+S2+X3+X4+anno, data = train, method = "adaboost",
+AdaBTune <- train(ris~S1+S2+X3+X4+S1*anno+S2*anno+anno, data = train, method = "adaboost",
                   tuneLength = 2, na.action=na.exclude,
                   trControl = cvCtrl, metric="metric")
 
@@ -194,6 +195,33 @@ getTrainPerf(AdaBTune)
 
 ### Risultati ----
 results <- resamples(list(Tree=rpartTuneCvA, RandomForest=rfTune, 
-                          NeuralNet=NNTune, XGBoosting=XGBTune,
-                          PatientRules=PRIMTune, AdaBoost=AdaBTune));results 
+                          NeuralNet=NNTune, XGBoosting=XGBTune
+                        , AdaBoost=AdaBTune));results 
 bwplot(results)
+
+### Test -----
+# estimate probs P(M)
+test$p1 = predict(glm_lasso       , test, "prob")[,-1]
+test$p2 = predict(rpartTuneCvA, test, "prob")[,-1]
+test$p3 = predict(rfTune    , test, "prob")[,-1]
+test$p4 = predict(NNTune     , test, "prob")[,-1]
+test$p5 = predict(XGBTune, test, "prob")[,-1]
+test$p6 = predict(AdaBTune, test, "prob")[,-1]
+
+# roc values
+library(pROC)
+r1=roc(ris ~ p1, data = test)
+r2=roc(ris ~ p2, data = test)
+r3=roc(ris ~ p3, data = test)
+r4=roc(ris ~ p4, data = test)
+r5=roc(ris ~ p5, data = test)
+r6=roc(ris ~ p6, data = test)
+
+plot(r1) #lasso nero
+plot(r2,add=T,col="red") #Tree
+plot(r3,add=T,col="blue") #RF
+plot(r4,add=T,col="yellow") #NN
+plot(r5,add=T,col="violet") #XGB
+plot(r6,add=T,col="orange") #Ada
+legend("bottomright", c("Tree", "Random Forest", "NN","XGB","ADA"),
+       text.col=c("red","blue","yellow","violet","orange"))

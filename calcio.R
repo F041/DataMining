@@ -124,22 +124,25 @@ write.csv(ca,"C:/Users/F041/Downloads/CalcioTotale.csv", row.names = FALSE)
 
 
 #### Preparazione dati ------
-split <- createDataPartition(y=dati$ris, p = 0.60, list = FALSE)
-train <- dati[1:2600,]
-test <- dati[2601:3578,]
+dati$S1<-as.factor(dati$S1)
+dati$S2<-as.factor(dati$S2)
+dati<-na.omit(dati)
+split <- createDataPartition(y=dati$ris, p = 0.7, list = FALSE)
+train <- dati[split,]
+test <- dati[-split,]
 train$ris<-as.factor((train$ris))
 levels(train$ris) <- c("Win", "Bank")
 train<-train[!train$S1=="cesena" | !train$S2=="cesena",]
 
-loss_matr <- matrix(c(0, 10,10, 0), nrow = 2);loss_matr
+loss_matr <- matrix(c(0, -10,-10, 0), nrow = 2);loss_matr
 
 ####  Lasso -----
 set.seed(1234)
-grid = expand.grid(.alpha=1,.lambda=seq(0, 1, by = 0.01))
+grid = expand.grid(.alpha=1,.lambda=seq(0, 1, by = 0.001))
 Control=trainControl(method= "cv",number=10, classProbs=TRUE)
 glm_lasso=train(ris~log(X3+1)+S1*anno+S2*anno+anno, method = "glmnet", data=train,
                 trControl = Control, tuneLength=10, tuneGrid=grid, metric="Accuracy", na.action=na.exclude, 
-                parms = list(loss=loss_matr))
+                cost = list(loss=loss_matr))
 glm_lasso
 plot(glm_lasso)
 getTrainPerf(glm_lasso)
@@ -149,11 +152,10 @@ plot(varImp(object=glm_lasso),main="train tuned - Variable Importance")
 ### Albero ------
 set.seed(1)
 Grid2 = expand.grid(.cp     =seq(0,1,  by=0.05)            )
-cvCtrl <- trainControl(method = "cv", number=10, classProbs = TRUE,
-                       summaryFunction = twoClassSummary)
-rpartTuneCvA <- train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "rpart",
+cvCtrl <- trainControl(method = "cv", number=10, classProbs = TRUE)
+rpartTuneCvA <- train(ris~S1+S2+log(X3+1)+S1*anno+S2*anno+anno, data = train, method = "rpart",
                       tuneLength = 10, na.action=na.exclude, tuneGrid=Grid2,
-                      trControl = cvCtrl, metric="Accuracy", parms = list(loss=loss_matr))
+                      trControl = cvCtrl, metric="Accuracy")
 
 rpartTuneCvA
 getTrainPerf(rpartTuneCvA)
@@ -163,11 +165,10 @@ plot(varImp(object=rpartTuneCvA),main="train tuned - Variable Importance")
 ### Random Forest -----
 set.seed(1)
 Grid4 = expand.grid(.mtry   =seq(1,8,  by=2)               )
-cvCtrl <- trainControl(method = "cv", number=10, classProbs = TRUE,
-                       summaryFunction = twoClassSummary)
-rfTune <- train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "rf",
+cvCtrl <- trainControl(method = "cv", number=10, classProbs = TRUE)
+rfTune <- train(ris~S1+S2+log(X3+1)+S1*anno+S2*anno+anno, data = train, method = "rf",
                 tuneLength = 5,
-                trControl = cvCtrl, metric="metric", na.action=na.exclude, tuneGrid=Grid4,
+                trControl = cvCtrl, na.action=na.exclude, tuneGrid=Grid4,
                 parms = list(loss=loss_matr)) # con tuneLength=5 ci mette tanto
 rfTune
 getTrainPerf(rfTune)
@@ -176,19 +177,18 @@ plot(varImp(object=rfTune),main="train tuned - Variable Importance")
 ### Neural Net -----
 set.seed(2)
 Grid0 = expand.grid(.size   =seq(1,7,  by=1), .decay = 0.1 )
-cvCtrl <- trainControl(method = "cv", number=10, classProbs = TRUE,
-                       summaryFunction = twoClassSummary)
-NNTune <- train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "nnet",
+cvCtrl <- trainControl(method = "cv", number=10, classProbs = TRUE)
+NNTune <- train(ris~S1+S2+log(X3+1)+S1*anno+S2*anno+anno, data = train, method = "nnet",
                 tuneLength = 4, tuneGrid=Grid0,
-                trControl = cvCtrl, metric="Accuracy", preProcess="range", na.action=na.exclude) # Non andare oltre il 6 di tuneLength 
+                trControl = cvCtrl, preProcess="range", na.action=na.exclude, parms = list(loss=loss_matr)) # Non andare oltre il 6 di tuneLength 
 NNTune
+getTrainPerf(NNTune)
 plot(varImp(object=NNTune),main="train tuned - Variable Importance")
 
 ### Xtreme Gradient -----
 set.seed(3)
-cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE,
-                       summaryFunction = twoClassSummary)
-XGBTune <- train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "xgbTree",
+cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE)
+XGBTune <- train(ris~S1+S2+log(X3+1)+S1*anno+S2*anno+anno, data = train, method = "xgbTree",
                  tuneLength = 3,
                  trControl = cvCtrl, metric="Accuracy", na.action=na.exclude) # Non andare oltre il 6 di tuneLength 
 XGBTune
@@ -197,10 +197,9 @@ plot(varImp(object=XGBTune),main="train tuned - Variable Importance")
 
 ### Adaboost ------
 set.seed(5)
-cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE,
-                       summaryFunction = twoClassSummary)
-AdaBTune <- train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "adaboost",
-                  tuneLength = 3, na.action=na.exclude,
+cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE)
+AdaBTune <- train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "AdaBoost.M1",
+                  tuneLength = 6, na.action=na.exclude, #min lenght =2
                   trControl = cvCtrl, metric="Accuracy")
 
 AdaBTune
@@ -208,9 +207,8 @@ getTrainPerf(AdaBTune)
 
 ### Naive Bayes ------
 set.seed(5)
-cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE,
-                       summaryFunction = twoClassSummary)
-NBtune <- train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "nb",
+cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE)
+NBtune <- train(ris~S1+S2+log(X3+1)+S1*anno+S2*anno+anno, data = train, method = "nb",
                   tuneLength = 5, na.action=na.exclude,
                   trControl = cvCtrl, metric="Sens")
 
@@ -220,14 +218,40 @@ getTrainPerf(NBtune)
 ### PLS ------
 
 pls=train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "pls", 
-          trControl = Control, tuneLength=10, na.action=na.exclude)
+          trControl = cvControl, tuneLength=10, na.action=na.exclude)
 pls
 getTrainPerf(pls)
 
+### deep boost ------
+set.seed(115)
+cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE)
+Deep=train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "deepboost", 
+          trControl = cvCtrl, tuneLength=4, na.action=na.exclude)
+Deep
+getTrainPerf(Deep)
+
+### KNN ------
+set.seed(115)
+cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE)
+kknnT=train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "kknn", 
+           trControl = cvCtrl, tuneLength=5, na.action=na.exclude)
+kknnT
+getTrainPerf(kknnT)
+
+
+
+### SVM ------
+set.seed(111)
+cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE)
+svmT=train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "svmLinear3", 
+            trControl = cvCtrl, tuneLength=5, na.action=na.exclude)
+svmT
+getTrainPerf(svmT)
+
 ### Risultati ----
-results <- resamples(list(Tree=rpartTuneCvA, RandomForest=rfTune, 
-                          NeuralNet=NNTune, XGBoosting=XGBTune
-                        , AdaBoost=AdaBTune, NaivaBayes=NBtune));results 
+results <- resamples(list(Lasso=glm_lasso, Tree=rpartTuneCvA, RandomForest=rfTune, 
+                          NeuralNet=NNTune, XGBoosting=XGBTune, NaivaBayes=NBtune, Ada=AdaBTune,
+                          deep=Deep, kknn=kknnT, svm=svmT));results 
 bwplot(results)
 
 ### Test -----
@@ -236,14 +260,16 @@ test<-test[!test$S1=="cesena" & !test$S2=="cesena",]
 test<-test[!test$S1=="torino"& !test$S2=="torino",]
 test<-test[!test$S1=="reggina"& !test$S2=="reggina",]
 test<-na.omit(test)
-test$p1 = predict(glm_lasso       , test, "prob")[,-1]
-test$p2 = predict(rpartTuneCvA, test, "prob")[,-1]
-test$p3 = predict(rfTune    , test, "prob")[,-1]
-test$p4 = predict(NNTune     , test, "prob")[,-1]
-test$p5 = predict(XGBTune, test, "prob")[,-1]
-test$p6 = predict(AdaBTune, test, "prob")[,-1]
-test$p7 = predict(pls, test, "prob")[,-1]
-test$p8 = predict(NBtune, test, "prob")[,-1]
+test$p1 = predict(glm_lasso       , test, "prob")[,1]
+test$p2 = predict(rpartTuneCvA, test, "prob")[,1]
+test$p3 = predict(rfTune    , test, "prob")[,1]
+test$p4 = predict(NNTune     , test, "prob")[,1]
+test$p5 = predict(XGBTune, test, "prob")[,1]
+test$p6 = predict(AdaBTune, test, "prob")[,1]
+test$p7 = predict(pls, test, "prob")[,1]
+test$p8 = predict(NBtune, test, "prob")[,1]
+test$p9 = predict(Deep, test, "prob")[,1]
+test$p10 = predict(svmT, test, "prob")[,1]
 
 
 
@@ -257,6 +283,7 @@ r5=roc(ris ~ p5, data = test)
 r6=roc(ris ~ p6, data = test)
 r7=roc(ris ~ p7, data = test)
 r8=roc(ris ~ p8, data = test)
+r9=roc(ris ~ p9, data = test)
 
 
 plot(r1) #lasso nero
@@ -267,7 +294,8 @@ plot(r5,add=T,col="violet") #XGB
 plot(r6,add=T,col="orange") #Ada
 plot(r7,add=T,col="green") #PLS
 plot(r8,add=T) #NB
-legend("bottomright", c("lasso","Tree", "Random Forest", "NN","XGB","ADA", "PLS", "NB"),
+plot(r9,add=T) #deep
+legend("bottomright", c("lasso","Tree", "Random Forest", "NN","XGB","ADA", "PLS", "NB", "Deep"),
        text.col=c("black","red","blue","yellow","violet","orange","Green"))
 
 ### Scelta soglia migliore modello -----
@@ -279,11 +307,11 @@ pROC_obj <- roc(test$ris,test$p1,
                 plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
                 print.auc=TRUE, show.thres=TRUE)
 
-plot(pROC_obj, print.thres = quantile(pROC_obj$thresholds, seq(0.2,0.65,0.1))) #suggerisce un 0.516
+plot(pROC_obj, print.thres = quantile(pROC_obj$thresholds, seq(0.3,0.85,0.05))) #suggerisce un 0.516
 
 
 ### Risultati miglior modello, Lasso ------
-test$labelsp1<-as.factor(ifelse(test$p1>0.516,2,1))
+test$labelsp1<-as.factor(ifelse(test$p1>0.526,2,1))
 test$ris<-as.factor(test$ris)
 cm<-confusionMatrix(test$labelsp1, test$ris, positive="1") #Tante metriche, bellissimo
 
@@ -351,5 +379,26 @@ draw_confusion_matrix <- function(cm) {
 draw_confusion_matrix(cm)
 
 
+### Redditività ----
+test$bet<-10
+test$bet_res<-ifelse(test$ris ==test$labelsp1 & test$ris==1, test$bet*test$X3,0)
+test$bet_res2<-ifelse(test$ris ==test$labelsp1 & test$ris==2, 
+                      test$bet*((test$X4+test$X5)/2),0)
+sum(test$bet_res)
+sum(test$bet_res2)
+sum(test$bet)
 
+test$ROI<-((test$bet_res)+(test$bet_res2)-(test$bet))/(test$bet)
+plot(test$ROI)
+rev<-sum(test$bet_res)+sum(test$bet_res2)-sum(test$bet);rev
+ROIf<-((sum(test$bet_res)+sum(test$bet_res2)-sum(test$bet))/sum(test$bet))*100 #alto
+annualized_ROI<-ROIf/((nrow(test)/365)); annualized_ROI
 
+### PROVA ------
+set.seed(1234)
+library(caretEnsemble)
+classifiers<-c("kknn","rf")
+models<-caretList(x=train[,c(5,6)],
+                  y=train[,10],
+                  trControl=trainControl(method="cv",number=10,classProbs=TRUE),
+                  metric="Accuracy",methodList=classifiers, na.action=na.exclude)

@@ -14,6 +14,23 @@ library(dplyr)
 library(glmnet)
 library(caret)
 
+### DATI ROSE -----
+datiRose<-dati<-read.table("C:/Users/F041/Downloads/Rose calcio - Foglio1.csv", header = TRUE, sep = ",", dec=",")
+datiRose<- datiRose[,2:8]
+datiRose$X<-{
+  datiRose$X=tolower(datiRose$X)
+  datiRose$X=trimws(datiRose$X)
+  datiRose$X=removeNumbers(datiRose$X)
+  datiRose$X=stripWhitespace(datiRose$X)
+}
+datiRose<- datiRose[!grepl("Rosa",datiRose$Rosa),]
+datiRose$Valore.rosa.e<-gsub(" mln â,¬", "",datiRose$Valore.rosa.e)
+datiRose$Ã..valore.di.mercato<-gsub(" mln â,¬", "",datiRose$Ã..valore.di.mercato)
+
+datiRose <- datiRose %>% na.omit()
+datiRose<- separate (datiRose,datiRose$Anno,c("IA","FA"),"-")
+
+
 ### DATI PRIMA PARTE -----
 {
 ca<-read.xlsx("calcio.xlsx", sheetName = "Sheet1",header = FALSE)
@@ -179,7 +196,7 @@ train$ris<-as.factor((train$ris))
 levels(train$ris) <- c("Win", "Bank")
 train<-train[!train$S1=="cesena" | !train$S2=="cesena",]
 
-loss_matr <- matrix(c(0, -10,-10, 0), nrow = 2);loss_matr
+
 
 ####  Lasso -----
 set.seed(1234)
@@ -209,10 +226,10 @@ plot(varImp(object=rpartTuneCvA),main="train tuned - Variable Importance")
 
 ### Random Forest -----
 set.seed(1)
-Grid4 = expand.grid(.mtry   =seq(1,8,  by=1))  #by da 2 a 1, ovviamente ci metterà di più
+Grid4 = expand.grid(.mtry   =seq(2,8,  by=2))  #by da 2 a 1, ovviamente ci metterà di più
 cvCtrl <- trainControl(method = "cv", number=10, classProbs = TRUE)
 rfTune <- train(ris~S1+S2+log(X3+1)+S1*anno+S2*anno+anno, data = train, method = "rf",
-                tuneLength = 5,
+                tuneLength = 2, #troppo lungho con 5
                 trControl = cvCtrl, na.action=na.exclude, tuneGrid=Grid4) # con tuneLength=5 ci mette tanto
 rfTune
 getTrainPerf(rfTune)

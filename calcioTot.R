@@ -1,14 +1,10 @@
 setwd("C:/Users/F041/Downloads")
 
+### Librerie -----
 library(tidyverse)  # for data wrangling /discussione dei dati
 library(rvest)      # for web scraping strae i dati da una pagina web
 library(lubridate)  # for date formats  packeto per gestire i dati
 library(stringr)    # manipuate strings 
-
-#importazione da excel
-#importazione da excel
-#importazione da excel
-
 library(xlsx)
 library(tm) 
 library(SnowballC)
@@ -237,17 +233,16 @@ plot(varImp(object=NNTune),main="train tuned - Variable Importance")
 set.seed(3)
 cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE)
 XGBTune <- train(ris~S1+S2+log(X3+1)+S1*anno+S2*anno+anno, data = train, method = "xgbTree",
-                 tuneLength = 3,
+                 tuneLength = 4,
                  trControl = cvCtrl, metric="Accuracy", na.action=na.exclude) # Non andare oltre il 6 di tuneLength 
 XGBTune
 getTrainPerf(XGBTune)
-plot(varImp(object=XGBTune),main="train tuned - Variable Importance")
 
 ### Adaboost ------
-set.seed(5)
+set.seed(6)
 cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE)
 AdaBTune <- train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "AdaBoost.M1",
-                  tuneLength = 6, na.action=na.exclude, #min lenght =2
+                  tuneLength = 3, na.action=na.exclude, #min lenght =2
                   trControl = cvCtrl, metric="Accuracy")
 
 AdaBTune
@@ -266,7 +261,7 @@ getTrainPerf(NBtune)
 ### PLS ------
 
 pls=train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "pls", 
-          trControl = cvControl, tuneLength=10, na.action=na.exclude)
+          trControl = cvCtrl, tuneLength=10, na.action=na.exclude)
 pls
 getTrainPerf(pls)
 
@@ -274,7 +269,7 @@ getTrainPerf(pls)
 set.seed(115)
 cvCtrl <- trainControl(method = "cv", number=10, search="grid", classProbs = TRUE)
 Deep=train(ris~S1+S2+X3+S1*anno+S2*anno+anno, data = train, method = "deepboost", 
-           trControl = cvCtrl, tuneLength=4, na.action=na.exclude)
+           trControl = cvCtrl, tuneLength=3, na.action=na.exclude)
 Deep
 getTrainPerf(Deep)
 
@@ -355,11 +350,11 @@ pROC_obj <- roc(test$ris,test$p1,
                 plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
                 print.auc=TRUE, show.thres=TRUE)
 
-plot(pROC_obj, print.thres = quantile(pROC_obj$thresholds, seq(0.3,0.85,0.05))) #suggerisce un 0.516
+plot(pROC_obj, print.thres = quantile(pROC_obj$thresholds, seq(0.55,0.8,0.025))) #suggerisce un 0.474
 
 
 ### Risultati miglior modello, Lasso ------
-test$labelsp1<-as.factor(ifelse(test$p1>0.526,2,1))
+test$labelsp1<-as.factor(ifelse(test$p1>0.474,1,2))
 test$ris<-as.factor(test$ris)
 cm<-confusionMatrix(test$labelsp1, test$ris, positive="1") #Tante metriche, bellissimo
 
@@ -427,20 +422,32 @@ draw_confusion_matrix <- function(cm) {
 draw_confusion_matrix(cm)
 
 
-### Redditività ----
-test$bet<-10
-test$bet_res<-ifelse(test$ris ==test$labelsp1 & test$ris==1, test$bet*test$X3,0)
-test$bet_res2<-ifelse(test$ris ==test$labelsp1 & test$ris==2, 
-                      test$bet*((test$X4+test$X5)/2),0)
-sum(test$bet_res)
-sum(test$bet_res2)
-sum(test$bet)
-
-test$ROI<-((test$bet_res)+(test$bet_res2)-(test$bet))/(test$bet)
-plot(test$ROI)
-rev<-sum(test$bet_res)+sum(test$bet_res2)-sum(test$bet);rev
-ROIf<-((sum(test$bet_res)+sum(test$bet_res2)-sum(test$bet))/sum(test$bet))*100 #alto
-annualized_ROI<-ROIf/((nrow(test)/365)); annualized_ROI
+### Redditività: dipende dalla quota bank scelta e dalla probabilità di abbinare la scommessa bank ----
+tabellaROI<-data.frame()
+for(i in seq(1.3, 1.8, by = 0.025)) #la sequenza serve a vedere il comportamento del ROI in funzione della quota
+{
+  
+  test$bet<-ifelse(test$labelsp1==1,10,((10*i)-10))
+  test$bet_res<-ifelse(test$ris ==test$labelsp1 & test$ris==1, test$bet*test$X3,0)
+  test$bet_res2<-ifelse(test$ris ==test$labelsp1 & test$ris==2, 
+                        10,0)
+  sum(test$bet_res)
+  sum(test$bet_res2)
+  sum(test$bet)
+  
+  test$ROI<-((test$bet_res)+(test$bet_res2)-(test$bet))/(test$bet)
+  plot(test$ROI)
+  rev<-sum(test$bet_res)+sum(test$bet_res2)-sum(test$bet);rev
+  ROIf<-((sum(test$bet_res)+sum(test$bet_res2)-sum(test$bet))/sum(test$bet))*100 #alto
+  annualized_ROI<-ROIf/((nrow(test)/365)); annualized_ROI
+  ROI[i]<-annualized_ROI
+  test$capital<-(cumsum(test$bet_res)+cumsum(test$bet_res2)-cumsum(test$bet))
+  plot(test$capital)
+  print(cbind(ROI[i],i))
+  x <- c(annualized_ROI,i)
+  tabellaROI<-rbind(tabellaROI,x)
+  colnames(tabellaROI)<-c("ROI","Quota_bank")
+}
 
 ### PROVA ------
 set.seed(1234)

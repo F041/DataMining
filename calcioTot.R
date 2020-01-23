@@ -187,7 +187,7 @@ loss_matr <- matrix(c(0, -10,-10, 0), nrow = 2);loss_matr
 
 ####  Lasso -----
 set.seed(1234)
-grid = expand.grid(.alpha=1,.lambda=seq(0, 0.152, by = 0.001))
+grid = expand.grid(.alpha=1,.lambda=seq(0, 0.152, by = 0.001)) #non serve farlo arrivare a 1
 Control=trainControl(method= "cv",number=10, classProbs=TRUE)
 glm_lasso=train(ris~log(X3+1)+S1*anno+S2*anno+anno, method = "glmnet", data=train,
                 trControl = Control, tuneLength=10, tuneGrid=grid, metric="Accuracy", na.action=na.exclude, 
@@ -200,7 +200,7 @@ plot(varImp(object=glm_lasso),main="train tuned - Variable Importance")
 
 ### Albero ------
 set.seed(1)
-Grid2 = expand.grid(.cp     =seq(0,1,  by=0.05)            )
+Grid2 = expand.grid(.cp     =seq(0,0.3,  by=0.01)) #non serve farlo arrivare a 1
 cvCtrl <- trainControl(method = "cv", number=10, classProbs = TRUE)
 rpartTuneCvA <- train(ris~S1+S2+log(X3+1)+S1*anno+S2*anno+anno, data = train, method = "rpart",
                       tuneLength = 10, na.action=na.exclude, tuneGrid=Grid2,
@@ -213,23 +213,22 @@ plot(varImp(object=rpartTuneCvA),main="train tuned - Variable Importance")
 
 ### Random Forest -----
 set.seed(1)
-Grid4 = expand.grid(.mtry   =seq(1,8,  by=2)               )
+Grid4 = expand.grid(.mtry   =seq(1,8,  by=1))  #by da 2 a 1, ovviamente ci metterà di più
 cvCtrl <- trainControl(method = "cv", number=10, classProbs = TRUE)
 rfTune <- train(ris~S1+S2+log(X3+1)+S1*anno+S2*anno+anno, data = train, method = "rf",
                 tuneLength = 5,
-                trControl = cvCtrl, na.action=na.exclude, tuneGrid=Grid4,
-                parms = list(loss=loss_matr)) # con tuneLength=5 ci mette tanto
+                trControl = cvCtrl, na.action=na.exclude, tuneGrid=Grid4) # con tuneLength=5 ci mette tanto
 rfTune
 getTrainPerf(rfTune)
 plot(varImp(object=rfTune),main="train tuned - Variable Importance")
 
 ### Neural Net -----
 set.seed(2)
-Grid0 = expand.grid(.size   =seq(1,7,  by=1), .decay = 0.1 )
+Grid0 = expand.grid(.size   =seq(1,7,  by=1), .decay = seq(0.00,1,  by=0.1))
 cvCtrl <- trainControl(method = "cv", number=10, classProbs = TRUE)
 NNTune <- train(ris~S1+S2+log(X3+1)+S1*anno+S2*anno+anno, data = train, method = "nnet",
                 tuneLength = 4, tuneGrid=Grid0,
-                trControl = cvCtrl, preProcess="range", na.action=na.exclude, parms = list(loss=loss_matr)) # Non andare oltre il 6 di tuneLength 
+                trControl = cvCtrl, preProcess="range", na.action=na.exclude) # Non andare oltre il 6 di tuneLength 
 NNTune
 getTrainPerf(NNTune)
 plot(varImp(object=NNTune),main="train tuned - Variable Importance")
